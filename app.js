@@ -187,6 +187,25 @@ const getMinuteCandle = (code, minuteUnit, lastTime, count) => {
       // 현재 프로세스 응답 데이터 배열을 1. 각각 데이터 존재하는지 조회 하고 2. 각각 삽입 DB 커넥션이 불필요하게 많이 일어 남
       Array.from(response).forEach(candle => {
         candle = parseCandle(candle); // 데이터 정규화
+
+        const calcTime = candle.calc_timestamp;
+        /*
+        if(isNeedToCalcOBV5(calcTime)){
+          candleData.obv_5 = 계산
+          candleData.obv_5_p10 = 계산
+        }
+
+        if(isNeedToCalcOBV15(calcTime)){
+          candleData.obv_15 = 계산
+          candleData.obv_15_p10 = 계산
+        }
+
+        if(isNeedToCalcOBV240(calcTime)){
+          candleData.obv_240 = 계산
+          candleData.obv_240_p10 = 계산
+        }
+        */
+
         db.collection(collectionName).find({"market": code, "data": {"$elemMatch":{"calc_timestamp": candle.calc_timestamp}}}).count().then(cnt => {
           if(cnt === 0){ // 해당 시간의 데이터가 존재하지 않으면 데이터 삽입
             db.collection(collectionName).findOneAndUpdate({"market": code}, {$push: {data: candle}}, {upsert:true});
@@ -227,11 +246,11 @@ const getCurrMinuteCandle = () => { // 1분마다 캔들 데이터 조회
 
 const getPrevMinuteCandle = () => { // 1분마다 30분전의 캔들 데이터 조회 ex) 첫번재 실행 시 30분전, 두번째 실행 시 1시간전 ...
   const criTimestamp = new Date().getTime();
-  const halfMinute = 1000 * 60 * 30;
+  const halfHour = 1000 * 60 * 30;
   let seq = 1;
 
   setInterval(()=>{
-    const prevTime = criTimestamp - (halfMinute * seq++);
+    const prevTime = criTimestamp - (halfHour * seq++);
     const prevYymmdd = yyyymmddhhmmss(prevTime);
     executeMinuteCandle(prevYymmdd, codes, 1, 60);
     // executeMinuteCandle(currTime, codes, 15, 10);
@@ -275,4 +294,53 @@ const makeCandlesDefaultData = async () => {
 // makeCandlesDefaultData();
 
 getCurrMinuteCandle();
-getPrevMinuteCandle();
+// getPrevMinuteCandle();
+
+setInterval(()=>{
+  const currTimestamp = new Date().getTime();
+  const currCalcTime = parseTimestampToMinuteUnit(currTimestamp);
+  if(isNeedToCalcOBV240(currCalcTime)){ console.log("obv 240 / ", yyyymmddhhmmss(currTimestamp), " / ", currCalcTime); }
+  if(isNeedToCalcOBV15(currCalcTime)){ console.log("obv 15 / ", yyyymmddhhmmss(currTimestamp), " / ", currCalcTime); }
+  if(isNeedToCalcOBV5(currCalcTime)){ console.log("obv 5 / ", yyyymmddhhmmss(currTimestamp), " / ", currCalcTime); }
+}, 1000 * 60)
+
+const ONE_MINUTE = 60;
+const ONE_HOUR = ONE_MINUTE * 60;
+
+const isNeedToCalcOBV5 = (calc_time) => {
+  return calc_time % (ONE_MINUTE * 5) === 0;
+}
+
+const isNeedToCalcOBV15 = (calc_time) => {
+  return calc_time % (ONE_MINUTE * 15) === 0;
+}
+
+const isNeedToCalcOBV240 = (calc_time) => { 
+  return (calc_time) % (ONE_MINUTE * 240) === 0;
+}
+
+/*
+이슈. 데이터가 없을 경우의 시나리오 필요
+*/
+const calcObv5 = (type, code, candle) => {
+  /* 
+    1. candle.calc_timestamp를 기준으로 직전 계산 된 obv5 획득
+    2. candle.calc_timestamp를 기준으로 직전의 캔들 5개 획득
+    3. 계산
+  */
+  const criTime = candle.calc_timestamp;
+  const prevObv5 = 0;
+  const prevObv5_10 = 0;
+  const prevCandles = [];
+
+  const loopCnt = type === 'obv5' ? 5 : type === 'obv15' ? 15 : type === 'obv240' ? 240 : -1;
+  if(loopCnt === -1){ throw new Error("Illegal argument Error - type must be ['obv5' || 'obv15' || 'obv240']"); }
+
+  let prevVolume = 0;
+  for(let i = 0; i < loopCnt; i++){
+    if(prevCandles.length != loopCnt){} // 부족한 데이터 획득 시나리오 
+    let vol = prevCandles[i].candle_acc_trade_volume;
+    prevVolume += vol;
+  }
+}
+
