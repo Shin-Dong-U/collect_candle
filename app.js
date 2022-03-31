@@ -165,12 +165,13 @@ const candleSchema = new mongoose.Schema({
     }
   ]
 })
+// candleSchema.index({market: 1, calc_timestamp: 1}, {unique: true});
 
 const Candle = mongoose.model('minute_candle', candleSchema, 'minute_candles');
 const Candle15 = mongoose.model('minute_candle_15', candleSchema, 'minute_candles_15');
 const Candle240 = mongoose.model('minute_candle_240', candleSchema, 'minute_candles_240');
 
-const getMinuteCandle = (code, minuteUnit, lastTime, count) => {
+const getMinuteCandle = async (code, minuteUnit, lastTime, count) => {
   let collectionName = '';
   switch(minuteUnit){
     case 1: collectionName = 'minute_candles'; break;
@@ -179,41 +180,61 @@ const getMinuteCandle = (code, minuteUnit, lastTime, count) => {
   }
 
   const options = {method: 'GET', headers: {Accept: 'application/json'}};
-  // 1개의 마켓에 대한 캔들 데이터 요청
-  fetch(`https://api.upbit.com/v1/candles/minutes/${minuteUnit}?market=${code}&to=${lastTime}&count=${count}`, options)
-    .then(response => response.json())
-    .then(response => {
-      // Todo. 코드 개선필요
-      // 현재 프로세스 응답 데이터 배열을 1. 각각 데이터 존재하는지 조회 하고 2. 각각 삽입 DB 커넥션이 불필요하게 많이 일어 남
-      Array.from(response).forEach(candle => {
-        candle = parseCandle(candle); // 데이터 정규화
 
-        const calcTime = candle.calc_timestamp;
-        /*
-        if(isNeedToCalcOBV5(calcTime)){
-          candleData.obv_5 = 계산
-          candleData.obv_5_p10 = 계산
+  try {
+    // 1개의 마켓에 대한 캔들 데이터 요청
+    let response;
+    let tryCount = 0;
+    while(true){
+      response = await fetch(`https://api.upbit.com/v1/candles/minutes/${minuteUnit}?market=${code}&to=${lastTime}&count=${count}`, options);
+      if(response.status === 200){ break; }
+      
+      if(tryCount++ > 10){
+        throw new Error('업비트 요청한도 초과');
+        // 에러로그 기록 혹은 재시도 로직 
+        // 실패 시 직전 데이터 카피
+      }
+    }
+    
+
+
+    let response_json = await response.json();
+    
+    // Todo. 코드 개선필요
+    // 현재 프로세스 응답 데이터 배열을 1. 각각 데이터 존재하는지 조회 하고 2. 각각 삽입 DB 커넥션이 불필요하게 많이 일어 남
+    Array.from(response_json).forEach(async (candle) => {
+      candle = parseCandle(candle); // 데이터 정규화
+      const calcTime = candle.calc_timestamp;
+      
+      /*
+      if(isNeedToCalcOBV5(calcTime)){
+        candleData.obv_5 = 계산
+        candleData.obv_5_p10 = 계산
+      }
+
+      if(isNeedToCalcOBV15(calcTime)){
+        candleData.obv_15 = 계산
+        candleData.obv_15_p10 = 계산
+      }
+
+      if(isNeedToCalcOBV240(calcTime)){
+        candleData.obv_240 = 계산
+        candleData.obv_240_p10 = 계산
+      }
+      */
+
+      await db.collection(collectionName).find({"market": code, "data": {"$elemMatch":{"calc_timestamp": candle.calc_timestamp}}}).count().then(async (cnt) => {
+        if(cnt === 0){ // 해당 시간의 데이터가 존재하지 않으면 데이터 삽입
+          await db.collection(collectionName).findOneAndUpdate({"market": code}, {$push: {data: candle}}, {upsert:true});
         }
-
-        if(isNeedToCalcOBV15(calcTime)){
-          candleData.obv_15 = 계산
-          candleData.obv_15_p10 = 계산
-        }
-
-        if(isNeedToCalcOBV240(calcTime)){
-          candleData.obv_240 = 계산
-          candleData.obv_240_p10 = 계산
-        }
-        */
-
-        db.collection(collectionName).find({"market": code, "data": {"$elemMatch":{"calc_timestamp": candle.calc_timestamp}}}).count().then(cnt => {
-          if(cnt === 0){ // 해당 시간의 데이터가 존재하지 않으면 데이터 삽입
-            db.collection(collectionName).findOneAndUpdate({"market": code}, {$push: {data: candle}}, {upsert:true});
-          }
-        });
-      })
+      });
     })
-    .catch(err => {console.error('[' + code + '] ' + err); console.log(response)});
+  } catch (error) {
+    console.error('[' + code + '] ' + error); 
+    // 재요청 
+  }
+  
+    // catch(err => {);
 }
 
 const parseCandle = (candleData) => {
@@ -237,31 +258,24 @@ const parseTimestampToMinuteUnit = (timestamp) => {
 
 const getCurrMinuteCandle = () => { // 1분마다 캔들 데이터 조회
   setInterval(()=>{
-    const currTime = yyyymmddhhmmss(new Date().getTime());
+    const currTime = new Date().getTime().getISOString();
     executeMinuteCandle(currTime, codes, 1, 5);
     // executeMinuteCandle(currTime, codes, 15, 10);
     // executeMinuteCandle(currTime, codes, 240, 10);
   }, 60000);
 }
 
-const getPrevMinuteCandle = () => { // 1분마다 30분전의 캔들 데이터 조회 ex) 첫번재 실행 시 30분전, 두번째 실행 시 1시간전 ...
+const getPrevMinuteCandle = () => { // 1분마다 30분전의 캔들 데이터 조회 ex) 첫번재 실행 시 0분전, 두번째 실행 시 30분 전
   const criTimestamp = new Date().getTime();
   const halfHour = 1000 * 60 * 30;
-  let seq = 1;
+  let seq = 0;
 
   setInterval(()=>{
-    const prevTime = criTimestamp - (halfHour * seq++);
-    const prevYymmdd = yyyymmddhhmmss(prevTime);
-    executeMinuteCandle(prevYymmdd, codes, 1, 60);
+    const prevTime = new Date(criTimestamp - (halfHour * seq++)).toISOString();
+    executeMinuteCandle(prevTime, codes, 1, 100);
     // executeMinuteCandle(currTime, codes, 15, 10);
     // executeMinuteCandle(currTime, codes, 240, 10);
   }, 60000);
-}
-
-const  yyyymmddhhmmss = (timestamp) => {
-  const today = new Date(timestamp);
-  today.setHours(today.getHours() + 9); 
-  return today.toISOString().replace('T', ' ').substring(0, 19);
 }
 
 async function executeMinuteCandle(currTime, codes, timeUnit, count) {
@@ -293,16 +307,9 @@ const makeCandlesDefaultData = async () => {
 }
 // makeCandlesDefaultData();
 
-getCurrMinuteCandle();
+// getCurrMinuteCandle();
 // getPrevMinuteCandle();
 
-setInterval(()=>{
-  const currTimestamp = new Date().getTime();
-  const currCalcTime = parseTimestampToMinuteUnit(currTimestamp);
-  if(isNeedToCalcOBV240(currCalcTime)){ console.log("obv 240 / ", yyyymmddhhmmss(currTimestamp), " / ", currCalcTime); }
-  if(isNeedToCalcOBV15(currCalcTime)){ console.log("obv 15 / ", yyyymmddhhmmss(currTimestamp), " / ", currCalcTime); }
-  if(isNeedToCalcOBV5(currCalcTime)){ console.log("obv 5 / ", yyyymmddhhmmss(currTimestamp), " / ", currCalcTime); }
-}, 1000 * 60)
 
 const ONE_MINUTE = 60;
 const ONE_HOUR = ONE_MINUTE * 60;
@@ -344,3 +351,16 @@ const calcObv5 = (type, code, candle) => {
   }
 }
 
+const getPrevMinuteCandle2 = () => { 
+  const criTimestamp = 1648566000000;
+  const halfHour = 1000 * 60 * 30;
+  let seq = 0;
+
+  setInterval(()=>{
+    const nextTime = new Date(criTimestamp + (halfHour * seq++));
+    executeMinuteCandle(nextTime.toISOString(), codes, 1, 100);
+    // executeMinuteCandle(currTime, codes, 15, 10);
+    // executeMinuteCandle(currTime, codes, 240, 10);
+  }, 60000);
+}
+getPrevMinuteCandle2();
