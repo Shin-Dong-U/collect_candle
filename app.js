@@ -363,4 +363,53 @@ const getPrevMinuteCandle2 = () => {
     // executeMinuteCandle(currTime, codes, 240, 10);
   }, 60000);
 }
-getPrevMinuteCandle2();
+// getPrevMinuteCandle2();
+
+Candle.aggregate([
+  { $match: {market: "KRW-BTC"}},
+    { $unwind: '$data'},
+    { $match: {'data.calc_timestamp': {$lte: 1648566000}}},
+    { $sort: {'data.calc_timestamp': -1}},
+    { $limit: 6}
+]).exec((err, candles) => {
+  if(!candles.length || candles.length != 6){
+    console.log("데이터 수집 필요");
+  }
+
+
+  validCandles(candles, 'obv5')
+
+  candles.forEach(candle=>{
+    console.log(candle.data.calc_timestamp, ' / obv_5 : ', candle.data.obv_5, ' / obv_15 : ', candle.data.obv_15, ' / obv_240 : ', candle.data.obv_240);
+    
+  })
+  
+
+});
+
+const validCandles = (candles, type, criTime) => {
+  const len = candles.length;
+  
+  if(type === 'obv5'){
+    if(len !== 5) return false;
+
+  }else if(type === 'obv15'){
+    if(len !== 15) return false;
+
+  }else if(type === 'obv240'){
+    if(len !== 240) return false;
+
+  }else{
+    return false;
+  }
+
+  const minute = 60;
+  seq = 1;
+  candles.forEach(candle=>{ 
+    if(candle.calc_time !== criTime - (minute * seq++)){
+      return false;
+    }
+  })
+
+  return true;
+}
