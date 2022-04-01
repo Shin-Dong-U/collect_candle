@@ -24,8 +24,15 @@ const candleSchema = new mongoose.Schema({
       obv_240_p10: Number
     }
   ]
+}, {
+  timeseries: {
+    timeField: 'candle_date_time_utc',
+    granularity: 'minutes',
+  }
 });
 
-export const Candle = mongoose.model('minute_candle', candleSchema, 'minute_candles');
+// export const Candle = mongoose.model('minute_candle', candleSchema, 'minute_candles');
 export const Candle15 = mongoose.model('minute_candle_15', candleSchema, 'minute_candles_15');
 export const Candle240 = mongoose.model('minute_candle_240', candleSchema, 'minute_candles_240');
+
+export const Candle = mongoose.model('minute_candle_5', candleSchema, 'minute_candles_5');

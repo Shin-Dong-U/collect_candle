@@ -1,3 +1,5 @@
+
+
 export const makeCandlesDefaultData = async () => {
   await new Promise(resolve => setTimeout(resolve, 10000));
   for(let i = 0; i < codes.length; i++){

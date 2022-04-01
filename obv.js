@@ -2,11 +2,22 @@ import fetch from 'node-fetch';
 import {Candle} from './model/candle.js';
 import getKrwMarketCodes from './marke_codes.js';
 
+// obv 최초값 입력 기준 시 
+const CRI_OBV5_CALC_TIME = 1648566000;
+const CRI_OBV15_CALC_TIME = 1648566000;
+const CRI_OBV240_CALC_TIME = 1648569600;
+
 export const getObv = async (code, type, criTime) => {
   const len = type + 1;
   const prevObvIdx = len - 2;
+
+  // 요청 시간이 기준시와 동일하거나 과거일 경우 0으로 처리
+  if(type === 5 && criTime <= CRI_OBV5_CALC_TIME){ return 0; }
+  if(type === 15 && criTime <= CRI_OBV15_CALC_TIME){ return 0; }
+  if(type === 240 && criTime <= CRI_OBV240_CALC_TIME){ return 0; }
+
   // 1 criTime을 기준으로 이전 데이터 획득
-  const candles = await Candle.aggregate([
+  let candles = await Candle.aggregate([
     { $match: {market: code}},
       { $unwind: '$data'},
       { $match: {'data.calc_timestamp': {$lt: criTime}}},
@@ -14,15 +25,14 @@ export const getObv = async (code, type, criTime) => {
       { $limit: len}
   ]);
   
-  if(!candles.length || candles.length != len){
-    //console.log("데이터 수집 필요"); // Todo. 데이터 재 수집 프로세스 작성
-  }
-
   // 2. 획득 데이터 검증 
-  const isValid = validCandles(candles, type, 1648566300);
-  // console.log("isvalid : ", isValid);
+  const isValid = validCandles(candles, type, criTime);
+  
   // 3. 누락 데이터 처리 (작업 전)
+  if(!isValid){
 
+  }
+  
   // print(candles);
   
   // 4. obv 계산
@@ -144,8 +154,8 @@ export const obvUpdateProcess = async (criTime) => {
       if(isNeedToCalcOBV5(time)){
         const obv_5 = await getObv(code, 5, time);
         const obv_5_p10 = await getObvP10(code, 5, time);
-        
-        // if(code === "KRW-BTC") { console.log(code , 'obv_5 : ', obv_5, ' / obv_5_p10 : ', obv_5_p10); }
+
+        if(code === "KRW-BTC") { console.log(code , 'obv_5 : ', obv_5, ' / obv_5_p10 : ', obv_5_p10); }
         await Candle.updateOne(
           { market: code, data: {$elemMatch:{calc_timestamp: {$eq: time}}}},
           {$set: {'data.$.obv_5': obv_5, 'data.$.obv_5_p10': obv_5_p10}}

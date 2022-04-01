@@ -29,20 +29,33 @@ const getMinuteCandle = async (code, minuteUnit, lastTime, count) => {
     // 1개의 마켓에 대한 캔들 데이터 요청
     let response;
     let tryCount = 0;
+    let isFail = false;
     while(true){
       response = await fetch(`https://api.upbit.com/v1/candles/minutes/${minuteUnit}?market=${code}&to=${lastTime}&count=${count}`, options);
       if(response.status === 200){ break; }
       
       if(tryCount++ > 10){
-        throw new Error('업비트 요청한도 초과');
+        console.log('업비트 요청한도 초과 - ' + code);
         // 에러로그 기록 혹은 재시도 로직 
         // 실패 시 직전 데이터 카피
+        isFail = true;
+        break;
       }
     }
     
-
-
-    let response_json = await response.json();
+    let response_json;
+    if(isFail){
+      response_json = await Candle.aggregate([
+        { $match: {market: code}},
+          { $unwind: '$data'},
+          { $match: {'data.calc_timestamp': {$lt: lastTime}}},
+          { $sort: {'data.calc_timestamp': -1}},
+          { $limit: 1}
+      ])
+    }else{
+      response_json = await response.json();
+    }
+    
     
     // Todo. 코드 개선필요
     // 현재 프로세스 응답 데이터 배열을 1. 각각 데이터 존재하는지 조회 하고 2. 각각 삽입 DB 커넥션이 불필요하게 많이 일어 남
@@ -51,18 +64,18 @@ const getMinuteCandle = async (code, minuteUnit, lastTime, count) => {
       const calcTime = candle.calc_timestamp;
       
       if(isNeedToCalcOBV5(calcTime)){
-        candleData.obv_5 = await getObv(code, 5, calcTime);
-        candleData.obv_5_p10 = await getObvP10(code, 5, calcTime);
+        candle.obv_5 = await getObv(code, 5, calcTime);
+        candle.obv_5_p10 = await getObvP10(code, 5, calcTime);
       }
 
       if(isNeedToCalcOBV15(calcTime)){
-        candleData.obv_15 = await getObv(code, 15, calcTime);
-        candleData.obv_15_p10 = await getObvP10(code, 15, calcTime);
+        candle.obv_15 = await getObv(code, 15, calcTime);
+        candle.obv_15_p10 = await getObvP10(code, 15, calcTime);
       }
 
       if(isNeedToCalcOBV240(calcTime)){
-        candleData.obv_240 = await getObv(code, 240, calcTime);
-        candleData.obv_240_p10 = await getObvP10(code, 240, calcTime);
+        candle.obv_240 = await getObv(code, 240, calcTime);
+        candle.obv_240_p10 = await getObvP10(code, 240, calcTime);
       }
       
       await db.collection(collectionName).find({"market": code, "data": {"$elemMatch":{"calc_timestamp": candle.calc_timestamp}}}).count().then(async (cnt) => {
@@ -75,8 +88,6 @@ const getMinuteCandle = async (code, minuteUnit, lastTime, count) => {
     console.error('[' + code + '] ' + error); 
     // 재요청 
   }
-  
-    // catch(err => {);
 }
 
 const parseCandle = (candleData) => {
@@ -101,12 +112,13 @@ const parseTimestampToMinuteUnit = (timestamp) => {
 const getCurrMinuteCandle = () => { // 1분마다 캔들 데이터 조회
   setInterval(()=>{
     const currTime = new Date().toISOString();
-    executeMinuteCandle(currTime, codes, 1, 5);
-  }, 60000);
+    executeMinuteCandle(currTime, codes, 1, 200);
+  }, 1000 * 30);
 }
 
 // 기준시에서 1시간씩 증가시키며 캔들 데이터 조회 
-const getPrevMinuteCandle = (criTime) => { 
+const getPrevMinuteCandle = (criTime) => {
+  console.log('start getPrevMinuteCandle');
   const hour = 1000 * 60 * 60;
   criTime = criTime - (criTime % (hour));
   let seq = 0;
@@ -114,7 +126,10 @@ const getPrevMinuteCandle = (criTime) => {
   setInterval(()=>{
     const time = new Date(criTime + (hour * seq++)).toISOString();
     executeMinuteCandle(time, codes, 1, 100);
-  }, 60000);
+    console.log('ing getPrevMinuteCandle / ', time);
+  }, 1000 * 1);
+  
+  console.log('end getPrevMinuteCandle');
 }
 
 async function executeMinuteCandle(currTime, codes, timeUnit, count) {
@@ -135,6 +150,11 @@ async function executeMinuteCandle(currTime, codes, timeUnit, count) {
 
 
 // getCurrMinuteCandle();
-//let prevTime = 1648573200000; // 2022-03-30 02:00
+let prevTime = 1648573200000; // 2022-03-30 02:00
 // getPrevMinuteCandle(prevTime);
 // obvUpdateProcess(1648566300);
+
+let a = 1648569600 * 1000;
+getPrevMinuteCandle(a);
+
+
