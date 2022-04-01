@@ -105,14 +105,15 @@ const getCurrMinuteCandle = () => { // 1분마다 캔들 데이터 조회
   }, 60000);
 }
 
-const getPrevMinuteCandle = () => { // 1분마다 30분전의 캔들 데이터 조회 ex) 첫번재 실행 시 0분전, 두번째 실행 시 30분 전
-  const criTimestamp = new Date().getTime();
-  const halfHour = 1000 * 60 * 30;
+// 기준시에서 1시간씩 증가시키며 캔들 데이터 조회 
+const getPrevMinuteCandle = (criTime) => { 
+  const hour = 1000 * 60 * 60;
+  criTime = criTime - (criTime % (hour));
   let seq = 0;
 
   setInterval(()=>{
-    const prevTime = new Date(criTimestamp - (halfHour * seq++)).toISOString();
-    executeMinuteCandle(prevTime, codes, 1, 100);
+    const time = new Date(criTime + (hour * seq++)).toISOString();
+    executeMinuteCandle(time, codes, 1, 100);
   }, 60000);
 }
 
@@ -134,5 +135,6 @@ async function executeMinuteCandle(currTime, codes, timeUnit, count) {
 
 
 // getCurrMinuteCandle();
-// getPrevMinuteCandle();
-obvUpdateProcess(1648566300);
+//let prevTime = 1648573200000; // 2022-03-30 02:00
+// getPrevMinuteCandle(prevTime);
+// obvUpdateProcess(1648566300);
