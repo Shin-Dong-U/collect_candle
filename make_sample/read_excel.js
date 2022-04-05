@@ -1,7 +1,9 @@
-import mongoose from 'mongoose';
 import fs from 'fs';
+import mysql from 'mysql';
+import db_config from '../db_properties.js';
 
 // 1회성 샘플데이터 OBV 기준점 밀어넣기
+export const conn = mysql.createConnection({ host: db_config.host, user: db_config.user, password: db_config.password, database: db_config.database });
  
 const doUpdate = async () => {
   const dir = 'C:\\Users\\yoyohub_1\\Documents\\chart\\upbit';
@@ -71,89 +73,42 @@ const doUpdate = async () => {
   }
 
 
-  const connUrl = 'mongodb://192.168.219.106:27017/crypto';
-  mongoose.connect(connUrl);
-
-  var db = mongoose.connection;
-
-  await db.once("open", function() {
-    console.log("MongoDB database connection established successfully");
-  });
-
-
-  // console.log(candles);
-  // console.log(candles['KRW-1INCH']['obv_240']);
-  // console.log(Object.keys(candles).length);
-  const candleSchema = new mongoose.Schema({
-    market: String,
-    data:[
-      {
-        market: String,
-        candle_date_time_utc: String,
-        candle_date_time_kst: String,
-        opening_price: Number,
-        high_price: Number,
-        low_price: Number,
-        trade_price: Number,
-        calc_timestamp: Number,
-        timestamp: Number,
-        candle_acc_trade_price: Number,
-        candle_acc_trade_volume: Number,
-        unit: Number,
-        obv_5: Number,
-        obv_5_p10: Number,
-        obv_15: Number,
-        obv_15_p10: Number,
-        obv_240: Number,
-        obv_240_p10: Number
-      }
-    ]
-  })
-  // candleSchema.index({market: 1, calc_timestamp: 1}, {unique: true});
-
-  const Candle = mongoose.model('minute_candle', candleSchema, 'minute_candles');
-
-  let sample = {"market":"TEST","candle_date_time_utc":"2019-12-31T23:59:59.000Z","candle_date_time_kst":"2019-12-31T15:59:59.000Z","opening_price":0,"high_price":0,"low_price":0,"trade_price":0,"calc_timestamp":1648566000,"timestamp":1648566000,"candle_acc_trade_price":0,"candle_acc_trade_volume":0,"unit":0,"obv_5":0,"obv_5_p10":0,"obv_15":0,"obv_15_p10":0,"obv_240":0,"obv_240_p10":0}
-  let candle1 = new Candle({market: 'TEST', data: [sample]});
-
-
   for(const[code, val] of Object.entries(candles)){
     // if(code != 'KRW-BTC'){ continue; }
     console.log(code + ' / ' + val.obv_5.obv_5 + ' / ' + val.obv_15.obv_15 + ' / ' + val.obv_240.obv_240)
     console.log(code + ' / ' + val.obv_5.calc_timestamp + ' / ' + val.obv_15.calc_timestamp + ' / ' + val.obv_240.calc_timestamp)
-    var o5 = await Candle.updateOne(
-      {
-        market: code, 
-        data: {$elemMatch:{calc_timestamp: {$eq: val.obv_5.calc_timestamp} }} 
-      },
-      {
-        $set: {'data.$.obv_5': val.obv_5.obv_5}
-      },
-    );
     
-    var o15 = await Candle.updateOne(
-      {
-        market: code, 
-        data: {$elemMatch:{calc_timestamp: {$eq: val.obv_15.calc_timestamp} }} 
-      },
-      {
-        $set: {'data.$.obv_15': val.obv_15.obv_15}
-      },
-    );
-  
-    var o240 = await Candle.updateOne(
-      {
-        market: code, 
-        data: {$elemMatch:{calc_timestamp: {$eq: val.obv_240.calc_timestamp} }} 
-      },
-      {
-        $set: {'data.$.obv_240': val.obv_240.obv_240}
-      },
-    );
-    // if(o5.modifiedCount != 1){console.log(code, " / obv_5 업데이트 오류 / ", o5);}
-    // if(o15.modifiedCount != 1){console.log(code, " / obv_15 업데이트 오류 / ", o15);}
-    // if(o240.modifiedCount != 1){console.log(code, " / obv_240 업데이트 오류 / ", o240);}
+    conn.query(make_obv_update_sql(code, 5, val));
+    conn.query(make_obv_update_sql(code, 15, val));
+    conn.query(make_obv_update_sql(code, 240, val));
   }
+}
+
+const make_obv_update_sql = (code, type, candle) => {
+  let column = '';
+  let obv = 0;
+  let calc_timestamp = 0;
+  if(type == 5){
+    column = 'obv_5';
+    obv = candle.obv_5.obv_5;
+    calc_timestamp = candle.obv_5.calc_timestamp;
+  }else if(type == 15){
+    column = 'obv_15';
+    obv = candle.obv_15.obv_15;
+    calc_timestamp = candle.obv_15.calc_timestamp;
+  }else if(type ===240){
+    column = 'obv_240';
+    obv = candle.obv_240.obv_240;
+    calc_timestamp = candle.obv_240.calc_timestamp;
+  }
+  
+  const sql = `
+    UPDATE candles
+    SET ${column} = ${obv}
+    WHERE market = '${code}' AND calc_timestamp = ${calc_timestamp}
+  `;
+
+  return sql;
 }
 
 doUpdate();
