@@ -1,8 +1,16 @@
 import mysql from 'mysql';
 import db_config from './db_properties.js';
 import fetch from 'node-fetch';
+import getKrwMarketCodes from './marke_codes.js';
+import {Candle} from './model/candle.js';
+import {getObv, getObvP10, isNeedToCalcOBV5, isNeedToCalcOBV15, isNeedToCalcOBV240, obvUpdateProcess} from './obv.js';
 
 export const conn = mysql.createConnection({ host: db_config.host, user: db_config.user, password: db_config.password, database: db_config.database });
+
+conn.query('SELECT 1 + 1 AS solution, 3 as t1', function (error, results, fields) {
+  if (error) throw error;
+  console.log('The solution is: ', results[0] );
+});
 
 const codes = await getKrwMarketCodes();
 
@@ -108,19 +116,6 @@ async function executeMinuteCandle(currTime, codes, timeUnit, count) {
   }
 }
 
-const makeCandlesDefaultData = async () => {
-  await new Promise(resolve => setTimeout(resolve, 10000));
-  for(let i = 0; i < codes.length; i++){
-    const code = codes[i];
-    const candle1 = new Candle({"market": code});
-    const candle15 = new Candle15({"market": code});
-    const candle240 = new Candle240({"market": code});
-    candle1.save();
-    candle15.save();
-    candle240.save();
-  }
-}
-// makeCandlesDefaultData();
 
 //  getCurrMinuteCandle();
 // let prevTime = 1648573200000; // 2022-03-30 02:00
@@ -196,4 +191,3 @@ const make_candle_insert_sql = (candle) => {
     // console.log(sql);
     return sql;
 }
-
