@@ -6,45 +6,32 @@ import {Candle} from './model/candle.js';
 import {getObv, getObvP10, isNeedToCalcOBV5, isNeedToCalcOBV15, isNeedToCalcOBV240, obvUpdateProcess} from './obv.js';
 
 export const conn = mysql.createConnection({ host: db_config.host, user: db_config.user, password: db_config.password, database: db_config.database });
-
-conn.query('SELECT 1 + 1 AS solution, 3 as t1', function (error, results, fields) {
-  if (error) throw error;
-  console.log('The solution is: ', results[0] );
+conn.query('SELECT 1', (error, results, fields)=>{
+  if(error){ console.log(error); }
+  console.log('connected to mysql');
 });
 
 const codes = await getKrwMarketCodes();
 
 const getMinuteCandle = async (code, minuteUnit, lastTime, count) => {
-  let collectionName = '';
-  switch(minuteUnit){
-    case 1: collectionName = 'minute_candles'; break;
-    case 15: collectionName = 'minute_candles_15'; break;
-    case 240: collectionName = 'minute_candles_240'; break;
-  }
-
   const options = {method: 'GET', headers: {Accept: 'application/json'}};
   try {
     // 1개의 마켓에 대한 캔들 데이터 요청
     let response;
     let tryCount = 0;
-    let isFail = false;
+    
     while(true){
       response = await fetch(`https://api.upbit.com/v1/candles/minutes/${minuteUnit}?market=${code}&to=${lastTime}&count=${count}`, options);
       if(response.status === 200){ break; }
       
       if(tryCount++ > 10){
-        console.log('업비트 요청한도 초과 - ' + code);
-        isFail = true;
-        break;
+        const msg = '업비트 요청한도 초과 - ' + code;
+        throw msg;
       }
     }
     
     let response_json;
-    if(isFail){
-      
-    }else{
-      response_json = await response.json();
-    }
+    response_json = await response.json();
     
     Array.from(response_json).reverse().forEach(async (candle) => {
       candle = parseCandle(candle); // 데이터 정규화
@@ -52,12 +39,13 @@ const getMinuteCandle = async (code, minuteUnit, lastTime, count) => {
       
       // 캔들 데이터 저장
       const sql = await make_candle_insert_sql(candle);
-      conn.query(sql);
+      conn.query(sql, (error, results, fields)=>{
+        if(error){ console.log(error); }
+      });
     })
-
   } catch (error) {
     console.error('[' + code + '] ' + error); 
-    // 재요청 
+    // 재요청 혹은 다른 처리
   }
 }
 
@@ -117,15 +105,10 @@ async function executeMinuteCandle(currTime, codes, timeUnit, count) {
 }
 
 
-//  getCurrMinuteCandle();
+ getCurrMinuteCandle();
 // let prevTime = 1648573200000; // 2022-03-30 02:00
 const prevTime = 1648569600000; //  2022-03-30 01:00
-getPrevMinuteCandle(prevTime);
-// obvUpdateProcess(1648566300);
-
-// let a = 1648569600 * 1000;
-// getPrevMinuteCandle(a);
-
+// getPrevMinuteCandle(prevTime);
 
 const make_candle_insert_sql = (candle) => { 
   let sql = `
