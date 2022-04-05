@@ -1,176 +1,12 @@
-import mongoose from 'mongoose';
+import mysql from 'mysql';
+import db_config from './db_properties.js';
 import fetch from 'node-fetch';
 
-const codes = [
-  "KRW-BTC"
- ,"KRW-ETH"
- ,"KRW-NEO"
- ,"KRW-MTL"
- ,"KRW-LTC"
- ,"KRW-XRP"
- ,"KRW-ETC"
- ,"KRW-OMG"
- ,"KRW-SNT"
- ,"KRW-WAVES"
- ,"KRW-XEM"
- ,"KRW-QTUM"
- ,"KRW-LSK"
- ,"KRW-STEEM"
- ,"KRW-XLM"
- ,"KRW-ARDR"
- ,"KRW-ARK"
- ,"KRW-STORJ"
- ,"KRW-GRS"
- ,"KRW-REP"
- ,"KRW-ADA"
- ,"KRW-SBD"
- ,"KRW-POWR"
- ,"KRW-BTG"
- ,"KRW-ICX"
- ,"KRW-EOS"
- ,"KRW-TRX"
- ,"KRW-SC"
- ,"KRW-ONT"
- ,"KRW-ZIL"
- ,"KRW-POLY"
- ,"KRW-ZRX"
- ,"KRW-LOOM"
- ,"KRW-BCH"
- ,"KRW-BAT"
- ,"KRW-IOST"
- ,"KRW-RFR"
- ,"KRW-CVC"
- ,"KRW-IQ"
- ,"KRW-IOTA"
- ,"KRW-MFT"
- ,"KRW-ONG"
- ,"KRW-GAS"
- ,"KRW-UPP"
- ,"KRW-ELF"
- ,"KRW-KNC"
- ,"KRW-BSV"
- ,"KRW-THETA"
- ,"KRW-QKC"
- ,"KRW-BTT"
- ,"KRW-MOC"
- ,"KRW-ENJ"
- ,"KRW-TFUEL"
- ,"KRW-MANA"
- ,"KRW-ANKR"
- ,"KRW-AERGO"
- ,"KRW-ATOM"
- ,"KRW-TT"
- ,"KRW-CRE"
- ,"KRW-MBL"
- ,"KRW-WAXP"
- ,"KRW-HBAR"
- ,"KRW-MED"
- ,"KRW-MLK"
- ,"KRW-STPT"
- ,"KRW-ORBS"
- ,"KRW-VET"
- ,"KRW-CHZ"
- ,"KRW-STMX"
- ,"KRW-DKA"
- ,"KRW-HIVE"
- ,"KRW-KAVA"
- ,"KRW-AHT"
- ,"KRW-LINK"
- ,"KRW-XTZ"
- ,"KRW-BORA"
- ,"KRW-JST"
- ,"KRW-CRO"
- ,"KRW-TON"
- ,"KRW-SXP"
- ,"KRW-HUNT"
- ,"KRW-PLA"
- ,"KRW-DOT"
- ,"KRW-SRM"
- ,"KRW-MVL"
- ,"KRW-STRAX"
- ,"KRW-AQT"
- ,"KRW-GLM"
- ,"KRW-SSX"
- ,"KRW-META"
- ,"KRW-FCT2"
- ,"KRW-CBK"
- ,"KRW-SAND"
- ,"KRW-HUM"
- ,"KRW-DOGE"
- ,"KRW-STRK"
- ,"KRW-PUNDIX"
- ,"KRW-FLOW"
- ,"KRW-DAWN"
- ,"KRW-AXS"
- ,"KRW-STX"
- ,"KRW-XEC"
- ,"KRW-SOL"
- ,"KRW-MATIC"
- ,"KRW-NU"
- ,"KRW-AAVE"
- ,"KRW-1INCH"
- ,"KRW-ALGO"
- ,"KRW-NEAR"
- ,"KRW-WEMIX"
- ,"KRW-AVAX"
- ,"KRW-CELO"
- ,"KRW-T"
- ];
+export const conn = mysql.createConnection({ host: db_config.host, user: db_config.user, password: db_config.password, database: db_config.database });
 
-// const codes = [];
-// const getKrwMarketCodes = async () => {
-//   // if(codes !== []){ return;}
-//   const options = {method: 'GET', headers: {Accept: 'application/json'}};
-//   const response = await (await fetch('https://api.upbit.com/v1/market/all?isDetails=false', options)).json();
+const codes = await getKrwMarketCodes();
 
-//   const codes = [];
-//   Array.from(response).filter(e => e.market.startsWith("KRW-")).forEach((e)=> {
-//     codes.push(e.market);
-//   });
-
-//   return codes;
-// }
-
-const connUrl = 'mongodb://192.168.219.106:27017/crypto';
-mongoose.connect(connUrl);
-
-var db = mongoose.connection;
-
-db.once("open", function() {
-  console.log("MongoDB database connection established successfully");
-});
-
-const candleSchema = new mongoose.Schema({
-  market: String,
-  data:[
-    {
-      market: String,
-      candle_date_time_utc: String,
-      candle_date_time_kst: String,
-      opening_price: Number,
-      high_price: Number,
-      low_price: Number,
-      trade_price: Number,
-      calc_timestamp: Number,
-      timestamp: Number,
-      candle_acc_trade_price: Number,
-      candle_acc_trade_volume: Number,
-      unit: Number,
-      obv_5: Number,
-      obv_5_p10: Number,
-      obv_15: Number,
-      obv_15_p10: Number,
-      obv_240: Number,
-      obv_240_p10: Number
-    }
-  ]
-})
-
-const Candle = mongoose.model('minute_candle', candleSchema, 'minute_candles');
-const Candle15 = mongoose.model('minute_candle_15', candleSchema, 'minute_candles_15');
-const Candle240 = mongoose.model('minute_candle_240', candleSchema, 'minute_candles_240');
-
-const getMinuteCandle = (code, minuteUnit, lastTime, count) => {
+const getMinuteCandle = async (code, minuteUnit, lastTime, count) => {
   let collectionName = '';
   switch(minuteUnit){
     case 1: collectionName = 'minute_candles'; break;
@@ -179,22 +15,42 @@ const getMinuteCandle = (code, minuteUnit, lastTime, count) => {
   }
 
   const options = {method: 'GET', headers: {Accept: 'application/json'}};
-  // 1개의 마켓에 대한 캔들 데이터 요청
-  fetch(`https://api.upbit.com/v1/candles/minutes/${minuteUnit}?market=${code}&to=${lastTime}&count=${count}`, options)
-    .then(response => response.json())
-    .then(response => {
-      // Todo. 코드 개선필요
-      // 현재 프로세스 응답 데이터 배열을 1. 각각 데이터 존재하는지 조회 하고 2. 각각 삽입 DB 커넥션이 불필요하게 많이 일어 남
-      Array.from(response).forEach(candle => {
-        candle = parseCandle(candle); // 데이터 정규화
-        db.collection(collectionName).find({"market": code, "data": {"$elemMatch":{"calc_timestamp": candle.calc_timestamp}}}).count().then(cnt => {
-          if(cnt === 0){ // 해당 시간의 데이터가 존재하지 않으면 데이터 삽입
-            db.collection(collectionName).findOneAndUpdate({"market": code}, {$push: {data: candle}}, {upsert:true});
-          }
-        });
-      })
+  try {
+    // 1개의 마켓에 대한 캔들 데이터 요청
+    let response;
+    let tryCount = 0;
+    let isFail = false;
+    while(true){
+      response = await fetch(`https://api.upbit.com/v1/candles/minutes/${minuteUnit}?market=${code}&to=${lastTime}&count=${count}`, options);
+      if(response.status === 200){ break; }
+      
+      if(tryCount++ > 10){
+        console.log('업비트 요청한도 초과 - ' + code);
+        isFail = true;
+        break;
+      }
+    }
+    
+    let response_json;
+    if(isFail){
+      
+    }else{
+      response_json = await response.json();
+    }
+    
+    Array.from(response_json).reverse().forEach(async (candle) => {
+      candle = parseCandle(candle); // 데이터 정규화
+      const calcTime = candle.calc_timestamp;
+      
+      // 캔들 데이터 저장
+      const sql = await make_candle_insert_sql(candle);
+      conn.query(sql);
     })
-    .catch(err => {console.error('[' + code + '] ' + err); console.log(response)});
+
+  } catch (error) {
+    console.error('[' + code + '] ' + error); 
+    // 재요청 
+  }
 }
 
 const parseCandle = (candleData) => {
@@ -216,33 +72,25 @@ const parseTimestampToMinuteUnit = (timestamp) => {
   return minuteUnit;
 }
 
-const getCurrMinuteCandle = () => { // 1분마다 캔들 데이터 조회
+const getCurrMinuteCandle = () => { // 주기적으로 캔들 데이터 조회
   setInterval(()=>{
-    const currTime = yyyymmddhhmmss(new Date().getTime());
-    executeMinuteCandle(currTime, codes, 1, 5);
-    // executeMinuteCandle(currTime, codes, 15, 10);
-    // executeMinuteCandle(currTime, codes, 240, 10);
-  }, 60000);
+    const currTime = new Date().toISOString();
+    executeMinuteCandle(currTime, codes, 1, 20);
+  }, 1000 * 30);
 }
 
-const getPrevMinuteCandle = () => { // 1분마다 30분전의 캔들 데이터 조회 ex) 첫번재 실행 시 30분전, 두번째 실행 시 1시간전 ...
-  const criTimestamp = new Date().getTime();
-  const halfMinute = 1000 * 60 * 30;
-  let seq = 1;
+// 기준시에서 1시간씩 증가시키며 캔들 데이터 조회 
+const getPrevMinuteCandle = (criTime) => {
+  console.log('start getPrevMinuteCandle');
+  const hour = 1000 * 60 * 60;
+  criTime = criTime - (criTime % (hour)) + 1000;
+  let seq = 0;
 
   setInterval(()=>{
-    const prevTime = criTimestamp - (halfMinute * seq++);
-    const prevYymmdd = yyyymmddhhmmss(prevTime);
-    executeMinuteCandle(prevYymmdd, codes, 1, 60);
-    // executeMinuteCandle(currTime, codes, 15, 10);
-    // executeMinuteCandle(currTime, codes, 240, 10);
-  }, 60000);
-}
-
-const  yyyymmddhhmmss = (timestamp) => {
-  const today = new Date(timestamp);
-  today.setHours(today.getHours() + 9); 
-  return today.toISOString().replace('T', ' ').substring(0, 19);
+    const time = new Date(criTime + (hour * seq++)).toISOString();
+    executeMinuteCandle(time, codes, 1, 62);
+    console.log('ing getPrevMinuteCandle / ', time);
+  }, 1000 * 3);
 }
 
 async function executeMinuteCandle(currTime, codes, timeUnit, count) {
@@ -274,5 +122,78 @@ const makeCandlesDefaultData = async () => {
 }
 // makeCandlesDefaultData();
 
-getCurrMinuteCandle();
-getPrevMinuteCandle();
+//  getCurrMinuteCandle();
+// let prevTime = 1648573200000; // 2022-03-30 02:00
+const prevTime = 1648569600000; //  2022-03-30 01:00
+getPrevMinuteCandle(prevTime);
+// obvUpdateProcess(1648566300);
+
+// let a = 1648569600 * 1000;
+// getPrevMinuteCandle(a);
+
+
+const make_candle_insert_sql = (candle) => { 
+  let sql = `
+      INSERT INTO candles(
+        market,
+        candle_date_time_utc,
+        candle_date_time_kst,
+        opening_price,
+        high_price,
+        low_price,
+        trade_price,
+        calc_timestamp,
+        timestamp,
+        candle_acc_trade_price,
+        candle_acc_trade_volume,
+        unit,
+        obv_5,
+        obv_5_p10,
+        obv_15,
+        obv_15_p10,
+        obv_240,
+        obv_240_p10
+      ) values(
+        '${candle.market}',
+        '${candle.candle_date_time_kst}',
+        '${candle.candle_date_time_utc}',
+        ${candle.opening_price},
+        ${candle.high_price},
+        ${candle.low_price},
+        ${candle.trade_price},
+        ${candle.calc_timestamp},
+        ${candle.timestamp},
+        ${candle.candle_acc_trade_price},
+        ${candle.candle_acc_trade_volume},
+        ${candle.unit},
+        FN_GET_OBV5('${candle.market}', ${candle.calc_timestamp}),
+        FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 5),
+        FN_GET_OBV15('${candle.market}', ${candle.calc_timestamp}),
+        FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 15),
+        FN_GET_OBV240('${candle.market}', ${candle.calc_timestamp}),
+        FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 240)
+      )
+      ON DUPLICATE KEY
+      UPDATE 
+        candle_date_time_kst = '${candle.candle_date_time_kst}',
+        candle_date_time_utc = '${candle.candle_date_time_utc}',
+        opening_price = ${candle.opening_price},
+        high_price = ${candle.high_price},
+        low_price = ${candle.low_price},
+        trade_price = ${candle.trade_price},
+        timestamp = ${candle.timestamp},
+        candle_acc_trade_price = ${candle.candle_acc_trade_price},
+        candle_acc_trade_volume = ${candle.candle_acc_trade_volume},
+        unit = ${candle.unit},
+        obv_5 = FN_GET_OBV5('${candle.market}', ${candle.calc_timestamp}),
+        obv_5_p10 = FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 5),
+        obv_15 = FN_GET_OBV15('${candle.market}', ${candle.calc_timestamp}),
+        obv_15_p10 = FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 15),
+        obv_240 = FN_GET_OBV240('${candle.market}', ${candle.calc_timestamp}),
+        obv_240_p10 = FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 240),
+        editdate = now()
+    `;
+    // console.log(sql);
+    return sql;
+}
+
