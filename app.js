@@ -1,11 +1,7 @@
-import mysql from 'mysql';
-import db_config from './db_properties.js';
 import fetch from 'node-fetch';
-import getKrwMarketCodes from './marke_codes.js';
-import {Candle} from './model/candle.js';
-import {getObv, getObvP10, isNeedToCalcOBV5, isNeedToCalcOBV15, isNeedToCalcOBV240, obvUpdateProcess} from './obv.js';
+import getKrwMarketCodes from './upbit/marke_codes.js';
+import {conn} from '../common/dbconn.js';
 
-export const conn = mysql.createConnection({ host: db_config.host, user: db_config.user, password: db_config.password, database: db_config.database });
 conn.query('SELECT 1', (error, results, fields)=>{
   if(error){ console.log(error); }
   console.log('connected to mysql');
@@ -110,7 +106,10 @@ async function executeMinuteCandle(currTime, codes, timeUnit, count) {
 const prevTime = 1648569600000; //  2022-03-30 01:00
 // getPrevMinuteCandle(prevTime);
 
-const make_candle_insert_sql = (candle) => { 
+const make_candle_insert_sql = (candle) => {
+  let utc = candle.candle_date_time_utc.substring(0, 19);
+  let kst = candle.candle_date_time_kst.substring(0, 19);
+  
   let sql = `
       INSERT INTO candles(
         market,
@@ -133,8 +132,8 @@ const make_candle_insert_sql = (candle) => {
         obv_240_p10
       ) values(
         '${candle.market}',
-        '${candle.candle_date_time_kst}',
-        '${candle.candle_date_time_utc}',
+        '${utc}',
+        '${kst}',
         ${candle.opening_price},
         ${candle.high_price},
         ${candle.low_price},
@@ -153,8 +152,8 @@ const make_candle_insert_sql = (candle) => {
       )
       ON DUPLICATE KEY
       UPDATE 
-        candle_date_time_kst = '${candle.candle_date_time_kst}',
-        candle_date_time_utc = '${candle.candle_date_time_utc}',
+        candle_date_time_utc = '${utc}',
+        candle_date_time_kst = '${kst}',
         opening_price = ${candle.opening_price},
         high_price = ${candle.high_price},
         low_price = ${candle.low_price},

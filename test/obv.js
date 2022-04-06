@@ -1,22 +1,19 @@
 import assert from 'assert';
-import mysql from 'mysql';
-import db_config from '../db_properties.js';
+import {conn} from '../common/dbconn.js';
 
 const t1 = 'hello mocha';
-const  conn = mysql.createConnection({ host: db_config.host, user: db_config.user, password: db_config.password, database: db_config.database });
 
-
-
+// OBV DB 값 검증
 const obvValueCheck = async (minuteUnit) => {
   const timeUnit = minuteUnit * 60;
   const limit = minuteUnit + 2;
 
-  // let beforeTime = Math.floor(new Date().getTime() / 1000);
-  // beforeTime = beforeTime - timeUnit - (beforeTime % (timeUnit));
-  let beforeTime = 1648569600; // 2022-03-30 01:00
-  if(minuteUnit == 240){
-    beforeTime = 1648569600 + (240 * 60); 
-  }
+  let beforeTime = Math.floor(new Date().getTime() / 1000);
+  beforeTime = beforeTime - timeUnit - (beforeTime % (timeUnit));
+  // let beforeTime = 1648569600; // 2022-03-30 01:00
+  // if(minuteUnit == 240){
+  //   beforeTime = 1648569600 + (240 * 60); 
+  // }
 
   const sql = `
     SELECT *
@@ -66,7 +63,7 @@ const obvValueCheck = async (minuteUnit) => {
     actureObv = prevObv + volume;
     
 
-    console.log("currP : " + currClose, " / prevP : " + prevClose + " / prevObv : " + prevObv + " / volume : " + volume);
+    console.log("현재종가 : " + currClose, " / 이전종가 : " + prevClose + " / 이전OBV : " + prevObv + " / volume : " + volume + " / OBV계산값 : " + actureObv + " / OBV DB 값 : " + expectedObv);
     assert.equal(round(actureObv), round(expectedObv));
   });
 }

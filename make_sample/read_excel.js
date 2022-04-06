@@ -1,6 +1,6 @@
 import fs from 'fs';
 import mysql from 'mysql';
-import db_config from '../db_properties.js';
+import db_config from '../config/db_properties.js';
 
 // 1회성 샘플데이터 OBV 기준점 밀어넣기
 export const conn = mysql.createConnection({ host: db_config.host, user: db_config.user, password: db_config.password, database: db_config.database });
