@@ -1,22 +1,31 @@
-import {conn} from '../common/dbconn.js';
+import db from '../common/dbconn.js';
 
 // 입력 시간으로부터 5분씩 증가하며 obv 업데이트
 export const obvUpdate = async (startTime) => {
   console.log('obv update 시작');
-  
+
+  const dbPool = await db.getPool();
+
   const fiveMinute = 60 * 5;
   let seq = 0;
-
+  
   while(true){
     const time = startTime + (fiveMinute * seq++);
     const sql = make_obv_update_sql(time);
-    
-    // console.log(time + ' / ' + currTime);
-    // console.log(sql);
-    await conn.query(sql, (error, results, fields)=>{
-      if(error){ console.log(error); }
-      console.log(time ,' / ', results);
+
+    dbPool.getConnection((err, conn) => {
+      if(err){ 
+        if(conn) {conn.release();} 
+        throw err; 
+      }
+      
+      conn.query(sql, (error, results, fields)=>{
+        if(error){ console.log(error); }
+        console.log(time ,' / ', results);
+        if(conn) {conn.release();} 
+      }); 
     });
+
     if(time > Math.floor(new Date().getTime() / 1000)) { 
       console.log(sql);
       console.log('obv 업데이트 종료');
@@ -41,4 +50,4 @@ const make_obv_update_sql = (calc_timestamp) => {
   return sql;
 }
 
-// doUpdate(1648566000); // 2022-03-30 00:00
+// obvUpdate(1649309100); // 2022-03-30 00:00

@@ -1,5 +1,5 @@
 import assert from 'assert';
-import {conn} from '../common/dbconn.js';
+import db from '../common/dbconn.js';
 
 const t1 = 'hello mocha';
 
@@ -26,46 +26,58 @@ const obvValueCheck = async (minuteUnit) => {
   `;
   // console.log(sql);
 
-  const result = await conn.query(sql, (error, results, fields)=>{
-    if(error){ throw error; }
-    
-    let prevObv = 0;
-    let prevClose = 0;
-    let currClose = 0;
-    let volume = 0;
+  const dbPool = await db.getPool(); 
+  dbPool.getConnection((err, conn) => {
+    if(err){ 
+      if(conn) {conn.release();} 
+      throw err; 
+    }
 
-    let expectedObv = 0;
-    let actureObv = 0;
-
-    for(let i = 0; i < results.length; i++){
-      const row = results[i];
-      // console.log(row);
-      if(i === 0){
-        expectedObv = row[`obv_${minuteUnit}`];
-        continue;
-      }else if(i === results.length -1){
-        prevClose = row[`trade_price`];
-        continue;
+    conn.query(sql, (error, results, fields)=>{
+      if(error){ 
+        console.log(error); 
+        throw error;
       }
 
-      if(i === 1) currClose = row[`trade_price`];
-      
-      if(i === minuteUnit) prevObv = row[`obv_${minuteUnit}`];
-      
-      volume += row[`candle_acc_trade_volume`];
-    }
+      let prevObv = 0;
+      let prevClose = 0;
+      let currClose = 0;
+      let volume = 0;
 
-    if(currClose === prevClose){
-      volume = 0;
-    }else if(currClose < prevClose){
-      volume *= -1;
-    }
-    actureObv = prevObv + volume;
-    
+      let expectedObv = 0;
+      let actureObv = 0;
 
-    console.log("현재종가 : " + currClose, " / 이전종가 : " + prevClose + " / 이전OBV : " + prevObv + " / volume : " + volume + " / OBV계산값 : " + actureObv + " / OBV DB 값 : " + expectedObv);
-    assert.equal(round(actureObv), round(expectedObv));
+      for(let i = 0; i < results.length; i++){
+        const row = results[i];
+        // console.log(row);
+        if(i === 0){
+          expectedObv = row[`obv_${minuteUnit}`];
+          continue;
+        }else if(i === results.length -1){
+          prevClose = row[`trade_price`];
+          continue;
+        }
+
+        if(i === 1) currClose = row[`trade_price`];
+        
+        if(i === minuteUnit) prevObv = row[`obv_${minuteUnit}`];
+        
+        volume += row[`candle_acc_trade_volume`];
+      }
+
+      if(currClose === prevClose){
+        volume = 0;
+      }else if(currClose < prevClose){
+        volume *= -1;
+      }
+      actureObv = prevObv + volume;
+
+      console.log("기준시간 : " + beforeTime + " / 현재종가 : " + currClose, " / 이전종가 : " + prevClose + " / 이전OBV : " + prevObv + " / volume : " + volume + " / OBV계산값 : " + actureObv + " / OBV DB 값 : " + expectedObv);
+      assert.equal(round(actureObv), round(expectedObv));
+      if(conn) {conn.release();} 
+    }); 
   });
+
 }
 
 const round = (val) => {

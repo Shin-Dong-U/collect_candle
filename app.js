@@ -1,175 +1,18 @@
-import fetch from 'node-fetch';
-import getKrwMarketCodes from './upbit/marke_codes.js';
-import {conn} from '../common/dbconn.js';
+import {getYesterdayTimestamp} from './common/utils.js';
+import {getPrevMinuteCandle, getCurrMinuteCandle, retryFailCandle} from './jobs/get_obv.js';
 
-conn.query('SELECT 1', (error, results, fields)=>{
-  if(error){ console.log(error); }
-  console.log('connected to mysql');
-});
+// const startTime = 1648566000000; //  2022-03-30 00:00
+let startTime = process.argv[2] ? Number(process.argv[2]) : getYesterdayTimestamp();
+// console.log(startTime);
 
-const codes = await getKrwMarketCodes();
-
-const getMinuteCandle = async (code, minuteUnit, lastTime, count) => {
-  const options = {method: 'GET', headers: {Accept: 'application/json'}};
-  try {
-    // 1개의 마켓에 대한 캔들 데이터 요청
-    let response;
-    let tryCount = 0;
-    
-    while(true){
-      response = await fetch(`https://api.upbit.com/v1/candles/minutes/${minuteUnit}?market=${code}&to=${lastTime}&count=${count}`, options);
-      if(response.status === 200){ break; }
-      
-      if(tryCount++ > 10){
-        const msg = '업비트 요청한도 초과 - ' + code;
-        throw msg;
-      }
-    }
-    
-    let response_json;
-    response_json = await response.json();
-    
-    Array.from(response_json).reverse().forEach(async (candle) => {
-      candle = parseCandle(candle); // 데이터 정규화
-      const calcTime = candle.calc_timestamp;
-      
-      // 캔들 데이터 저장
-      const sql = await make_candle_insert_sql(candle);
-      conn.query(sql, (error, results, fields)=>{
-        if(error){ console.log(error); }
-      });
-    })
-  } catch (error) {
-    console.error('[' + code + '] ' + error); 
-    // 재요청 혹은 다른 처리
-  }
+/*
+1. 입력 된 시간부터 현재까지 Candle 획득
+2. 1이 완료 되었다면 현재 시간부터 약 1분 단위로 요청
+3. 주기적으로 실패한 데이터가 있는지 확인 후 재 요청
+*/
+const start = (startTime) => {
+  getPrevMinuteCandle(startTime, getCurrMinuteCandle);
+  retryFailCandle();
 }
 
-const parseCandle = (candleData) => {
-  candleData.calc_timestamp = parseTimestampToMinuteUnit(candleData.timestamp);
-  
-  candleData.obv_5 = 0;
-  candleData.obv_5_p10 = 0;
-  candleData.obv_15 = 0;
-  candleData.obv_15_p10 = 0;
-  candleData.obv_240 = 0;
-  candleData.obv_240_p10 = 0;
-
-  return candleData;
-}
-
-const parseTimestampToMinuteUnit = (timestamp) => {
-  let secUnit = Math.floor(timestamp / 1000);
-  let minuteUnit = secUnit - (secUnit % 60);
-  return minuteUnit;
-}
-
-const getCurrMinuteCandle = () => { // 주기적으로 캔들 데이터 조회
-  setInterval(()=>{
-    const currTime = new Date().toISOString();
-    executeMinuteCandle(currTime, codes, 1, 20);
-  }, 1000 * 30);
-}
-
-// 기준시에서 1시간씩 증가시키며 캔들 데이터 조회 
-const getPrevMinuteCandle = (criTime) => {
-  console.log('start getPrevMinuteCandle');
-  const hour = 1000 * 60 * 60;
-  criTime = criTime - (criTime % (hour)) + 1000;
-  let seq = 0;
-
-  setInterval(()=>{
-    const time = new Date(criTime + (hour * seq++)).toISOString();
-    executeMinuteCandle(time, codes, 1, 62);
-    console.log('ing getPrevMinuteCandle / ', time);
-  }, 1000 * 3);
-}
-
-async function executeMinuteCandle(currTime, codes, timeUnit, count) {
-  let i = 0;
-  let len = codes.length;
-
-  while (true) {
-    await new Promise(resolve => setTimeout(resolve, 400));
-
-    const code = codes[i++];
-    // console.log(code);
-    getMinuteCandle(code, timeUnit, currTime, count);
-    
-    if(i >= len) break;
-  }
-}
-
-
- getCurrMinuteCandle();
-// let prevTime = 1648573200000; // 2022-03-30 02:00
-const prevTime = 1648569600000; //  2022-03-30 01:00
-// getPrevMinuteCandle(prevTime);
-
-const make_candle_insert_sql = (candle) => {
-  let utc = candle.candle_date_time_utc.substring(0, 19);
-  let kst = candle.candle_date_time_kst.substring(0, 19);
-  
-  let sql = `
-      INSERT INTO candles(
-        market,
-        candle_date_time_utc,
-        candle_date_time_kst,
-        opening_price,
-        high_price,
-        low_price,
-        trade_price,
-        calc_timestamp,
-        timestamp,
-        candle_acc_trade_price,
-        candle_acc_trade_volume,
-        unit,
-        obv_5,
-        obv_5_p10,
-        obv_15,
-        obv_15_p10,
-        obv_240,
-        obv_240_p10
-      ) values(
-        '${candle.market}',
-        '${utc}',
-        '${kst}',
-        ${candle.opening_price},
-        ${candle.high_price},
-        ${candle.low_price},
-        ${candle.trade_price},
-        ${candle.calc_timestamp},
-        ${candle.timestamp},
-        ${candle.candle_acc_trade_price},
-        ${candle.candle_acc_trade_volume},
-        ${candle.unit},
-        FN_GET_OBV5('${candle.market}', ${candle.calc_timestamp}),
-        FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 5),
-        FN_GET_OBV15('${candle.market}', ${candle.calc_timestamp}),
-        FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 15),
-        FN_GET_OBV240('${candle.market}', ${candle.calc_timestamp}),
-        FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 240)
-      )
-      ON DUPLICATE KEY
-      UPDATE 
-        candle_date_time_utc = '${utc}',
-        candle_date_time_kst = '${kst}',
-        opening_price = ${candle.opening_price},
-        high_price = ${candle.high_price},
-        low_price = ${candle.low_price},
-        trade_price = ${candle.trade_price},
-        timestamp = ${candle.timestamp},
-        candle_acc_trade_price = ${candle.candle_acc_trade_price},
-        candle_acc_trade_volume = ${candle.candle_acc_trade_volume},
-        unit = ${candle.unit},
-        obv_5 = FN_GET_OBV5('${candle.market}', ${candle.calc_timestamp}),
-        obv_5_p10 = FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 5),
-        obv_15 = FN_GET_OBV15('${candle.market}', ${candle.calc_timestamp}),
-        obv_15_p10 = FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 15),
-        obv_240 = FN_GET_OBV240('${candle.market}', ${candle.calc_timestamp}),
-        obv_240_p10 = FN_GET_OBV_P10('${candle.market}', ${candle.calc_timestamp}, 240),
-        editdate = now()
-    `;
-    // console.log(sql);
-    return sql;
-}
+start(startTime);
