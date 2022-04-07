@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 import getKrwMarketCodes from './upbit/marke_codes.js';
-import {conn} from '../common/dbconn.js';
+import {conn} from './common/dbconn.js';
 
 conn.query('SELECT 1', (error, results, fields)=>{
   if(error){ console.log(error); }
@@ -104,7 +104,7 @@ async function executeMinuteCandle(currTime, codes, timeUnit, count) {
  getCurrMinuteCandle();
 // let prevTime = 1648573200000; // 2022-03-30 02:00
 const prevTime = 1648569600000; //  2022-03-30 01:00
-// getPrevMinuteCandle(prevTime);
+getPrevMinuteCandle(prevTime);
 
 const make_candle_insert_sql = (candle) => {
   let utc = candle.candle_date_time_utc.substring(0, 19);
