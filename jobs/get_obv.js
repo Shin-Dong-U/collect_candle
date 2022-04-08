@@ -97,13 +97,40 @@ const parseTimestampToMinuteUnit = (timestamp) => {
   return minuteUnit;
 }
 
-export const getCurrMinuteCandle = () => { // 주기적으로 캔들 데이터 조회
+// 분캔들 조회시 *시 *분 01초가 되는 시점에 이후 프로세스를 수행하기 위하여 대기시간을 계산하는 함수
+const calcWattingTime = () => {
+  let startDelay = 0;
+  
+  const currSeconds = new Date().getSeconds();
+  if(currSeconds > 1){ 
+    startDelay = (61 - currSeconds) * 1000; 
+  }else if(currSeconds < 1){ 
+    startDelay = 1000; 
+  }
+  return startDelay;
+}
+
+// 1분간격으로 분 캔들 획득
+export const getCurrMinuteCandle = async () => { 
+  // *시 *분 01초까지 대기 후 시작
+  const startDelay = calcWattingTime();
+  await new Promise(resolve => setTimeout(resolve, startDelay));
+
+  const DEFAULT_CANDLE_COUNT = 1;
+  const FIRST_REQ_CANDLE_COUNT = 200;
+
+  const DEFAULT_INTERVAL = 120;
+  const FIRST_REQ_INTERVAL = 400;
+  
+  let loopCount = 0;
   setInterval(()=>{
     const timestamp = new Date().getTime();
     const reqTimeISO = new Date(timestamp).toISOString();
 
-    executeMinuteCandle(timestamp, reqTimeISO, codes, 1, 10);
-  }, 1000 * 30);
+    const count = (loopCount++ == 0) ? FIRST_REQ_CANDLE_COUNT : DEFAULT_CANDLE_COUNT;
+    const interval = (loopCount++ == 0) ? FIRST_REQ_INTERVAL : DEFAULT_INTERVAL;
+    executeMinuteCandle(timestamp, reqTimeISO, codes, 1, count);
+  }, 1000 * 60);
 }
 
 // 기준시에서 3시간씩 증가시키며 캔들 데이터 조회 
