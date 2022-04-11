@@ -18,7 +18,7 @@ const getMinuteCandle = async (code, minuteUnit, timestamp, timeISO, count) => {
   if(timestamp > new Date().getTime()){ return; } // 요청 시간이 현재 시간보다 크다면 리턴
   
   let reqTimestamp10 = Math.floor(timestamp / 1000);
-  reqTimestamp10 = reqTimestamp10 - (reqTimestamp10 % 60);
+  // reqTimestamp10 = reqTimestamp10 - (reqTimestamp10 % 60);
 
   // 1개의 마켓에 대한 캔들 데이터 요청
   const options = {method: 'GET', headers: {Accept: 'application/json'}};
@@ -35,9 +35,13 @@ const getMinuteCandle = async (code, minuteUnit, timestamp, timeISO, count) => {
   let response_json;
   response_json = await response.json();
   const taskArr = Array.from(response_json).reverse(); // 순차적 삽입을 위한 역순 정렬
+
+  if(taskArr.length != count){
+    console.log(`####[${code}] 요청(${count})-응답갯수(${taskArr.length}) 다름!!!!!!!}`);
+  }
   
   const dbPool = await db.getPool(); 
-  dbPool.getConnection((err, conn) => { // 요청 갯수만큼 1개의 커넥션으로 처리
+  dbPool.getConnection(async (err, conn) => { // 요청 갯수만큼 1개의 커넥션으로 처리
     if(err){ 
       if(conn) {conn.release();} 
       throw err; 
@@ -55,7 +59,7 @@ const getMinuteCandle = async (code, minuteUnit, timestamp, timeISO, count) => {
       
       if(candle && candle.calc_timestamp < oldestTimestamp10){ // 예상 시간대를 벗어나는 데이터는 무시
         taskArr.shift(); // 해당 데이터 제거
-        i--; // 이 경우 루프 카운트 X
+        i -= 1; // 이 경우 루프 카운트 X
         continue;
       }
 
@@ -68,7 +72,7 @@ const getMinuteCandle = async (code, minuteUnit, timestamp, timeISO, count) => {
         taskArr.shift();
       }
       
-      conn.query(sql, (error, results, fields)=>{
+      await conn.query(sql, (error, results, fields)=>{
         if(error){ console.log(error); }
       });
       seq++;
@@ -81,12 +85,12 @@ const getMinuteCandle = async (code, minuteUnit, timestamp, timeISO, count) => {
 const parseCandle = (candleData) => {
   candleData.calc_timestamp = parseTimestampToMinuteUnit(candleData.timestamp);
   
-  candleData.obv_5 = 0;
-  candleData.obv_5_p10 = 0;
-  candleData.obv_15 = 0;
-  candleData.obv_15_p10 = 0;
-  candleData.obv_240 = 0;
-  candleData.obv_240_p10 = 0;
+  candleData.obv_5 = null;
+  candleData.obv_5_p10 = null;
+  candleData.obv_15 = null;
+  candleData.obv_15_p10 = null;
+  candleData.obv_240 = null;
+  candleData.obv_240_p10 = null;
 
   return candleData;
 }
@@ -100,7 +104,7 @@ const parseTimestampToMinuteUnit = (timestamp) => {
 // 분캔들 조회시 *시 *분 01초가 되는 시점에 이후 프로세스를 수행하기 위하여 대기시간을 계산하는 함수
 const calcWattingTime = () => {
   let startDelay = 0;
-  
+
   const currSeconds = new Date().getSeconds();
   if(currSeconds > 1){ 
     startDelay = (61 - currSeconds) * 1000; 
@@ -116,7 +120,7 @@ export const getCurrMinuteCandle = async () => {
   const startDelay = calcWattingTime();
   await new Promise(resolve => setTimeout(resolve, startDelay));
 
-  const DEFAULT_CANDLE_COUNT = 1;
+  const DEFAULT_CANDLE_COUNT = 10;
   const FIRST_REQ_CANDLE_COUNT = 200;
 
   const DEFAULT_INTERVAL = 120;
@@ -124,8 +128,16 @@ export const getCurrMinuteCandle = async () => {
   
   let loopCount = 0;
   setInterval(()=>{
-    const timestamp = new Date().getTime();
-    const reqTimeISO = new Date(timestamp).toISOString();
+    const currDate = new Date();
+    let timestamp = currDate.getTime();
+    // 현재 시간이 n분 0초라면 1분 전의 데이터 요청 
+    if(currDate.getSeconds() == 0){ timestamp -= 1000; }
+
+    timestamp = timestamp - (timestamp % (60 * 1000));// 요청시간은 1분 단위로 고정
+    let reqTimeISO = new Date(timestamp + 1000).toISOString();// 실제 요청 ISO시간은 n분 1초로 설정
+
+    // const timestamp = new Date().getTime();
+    // const reqTimeISO = new Date(timestamp).toISOString();
 
     const count = (loopCount++ == 0) ? FIRST_REQ_CANDLE_COUNT : DEFAULT_CANDLE_COUNT;
     const interval = (loopCount++ == 0) ? FIRST_REQ_INTERVAL : DEFAULT_INTERVAL;
@@ -140,8 +152,16 @@ export const getPrevMinuteCandle = (startTime, afterFunc) => {
   let seq = 0;
 
   const interval = setInterval(()=>{
-    const reqTimestamp = startTime + (hour * 3 * seq++); // 기준시에서 n 시간 증가한 값
-    const reqTimeISO = new Date(reqTimestamp).toISOString(); 
+    let reqTimestamp = startTime + (hour * 3 * seq++); // 기준시에서 n 시간 증가한 값
+
+    const reqDate = new Date(reqTimestamp);
+    // 현재 시간이 n분 0초라면 1분 전의 데이터 요청 
+    if(reqDate.getSeconds() == 0){ reqTimestamp -= 1000; }
+
+    reqTimestamp = reqTimestamp - (reqTimestamp % (60 * 1000));// 요청시간은 1분 단위로 고정
+    const reqTimeISO = new Date(reqTimestamp + 1000).toISOString();// 실제 요청 ISO시간은 n분 1초로 설정
+
+    // const reqTimeISO = new Date(reqTimestamp).toISOString(); 
 
     executeMinuteCandle(reqTimestamp, reqTimeISO, codes, 1, 200, 200);
     console.log('ing getPrevMinuteCandle / ', reqTimeISO);
@@ -151,7 +171,7 @@ export const getPrevMinuteCandle = (startTime, afterFunc) => {
       clearInterval(interval); 
       if(afterFunc){ afterFunc(); }
     }
-  }, 1000 * 25);
+  }, 1000 * 30);
 }
 
 const executeMinuteCandle = async (timestamp, timeISO, codes, timeUnit, count, interval) => {
@@ -289,6 +309,7 @@ const make_sql_dummy_candle_insert = (market, calc_timestamp) => {
     WHERE 
       market = '${market}'
       AND calc_timestamp <= ${calc_timestamp}
+    ORDER BY calc_timestamp DESC
     LIMIT 1
 
     ON DUPLICATE KEY 

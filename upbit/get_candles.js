@@ -7,7 +7,7 @@ const getCandlesFromUpbit = async (code, minuteUnit, lastTime, count) => {
   return response;
 }
 
-// let res = await getCandlesFromUpbit('KRW-BTC', 1, '2022-04-07T00:00:00Z', 10);
-// console.log(await res.json());
+let res = await getCandlesFromUpbit('KRW-BTC', 1, '2022-04-11T05:26:00Z', 10);
+console.log(await res.json());
 
 export default getCandlesFromUpbit;

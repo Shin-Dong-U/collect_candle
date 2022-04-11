@@ -7,6 +7,7 @@ export const obvUpdate = async (startTime) => {
   const dbPool = await db.getPool();
 
   const fiveMinute = 60 * 5;
+  startTime = startTime - (startTime % fiveMinute); // 시작 시간 5분 단위로 변경
   let seq = 0;
   
   while(true){
