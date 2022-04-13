@@ -18,7 +18,7 @@ const getMinuteCandle = async (code, minuteUnit, timestamp, timeISO, count) => {
   if(timestamp > new Date().getTime()){ return; } // 요청 시간이 현재 시간보다 크다면 리턴
   
   let reqTimestamp10 = Math.floor(timestamp / 1000);
-  // reqTimestamp10 = reqTimestamp10 - (reqTimestamp10 % 60);
+  reqTimestamp10 = reqTimestamp10 - (reqTimestamp10 % 60);
 
   // 1개의 마켓에 대한 캔들 데이터 요청
   const options = {method: 'GET', headers: {Accept: 'application/json'}};
@@ -52,22 +52,32 @@ const getMinuteCandle = async (code, minuteUnit, timestamp, timeISO, count) => {
     
     let seq = 0;
     let seqTimestamp;
-    for(let i = 0; i < count; i++){
+    while(true){
       seqTimestamp = oldestTimestamp10 + (60 * seq);
       let candle = taskArr[0];
+
       if(candle){ candle = parseCandle(candle); }
       
-      if(candle && candle.calc_timestamp < oldestTimestamp10){ // 예상 시간대를 벗어나는 데이터는 무시
+      if(candle && isOutOfBoundsTime(reqTimestamp10, oldestTimestamp10, candle.calc_timestamp) ){ // 예상 시간대를 벗어나는 데이터는 무시
         taskArr.shift(); // 해당 데이터 제거
-        i -= 1; // 이 경우 루프 카운트 X
+        // if(code == 'KRW-BTC'){ console.log('범위 밖의 데이터 : ', seqTimestamp)}
         continue;
       }
 
       let sql = '';
       if(!candle || candle.calc_timestamp > seqTimestamp){ // 응답받은 분캔들에 비어있는 시간대가 존재하면 직전 데이터를 기준으로 데이터 생성 후 삽입
-        // 더미 데이터 생성
-        sql = make_sql_dummy_candle_insert(code, seqTimestamp);
-      }else{ // 정상 데이터 
+        // if(code == 'KRW-BTC'){ console.log('더미 데이터 : ', seqTimestamp)}
+        sql = make_sql_dummy_candle_insert(code, seqTimestamp); // 더미 데이터 생성
+      }else{
+        if(candle.calc_timestamp < seqTimestamp){ // 동일한 분 데이터가 연속으로 들어올 경우
+          
+          if(candle.calc_timestamp + 60 != seqTimestamp){ // 연속 3번이상 들어오는 케이스가 있는지 확인
+            console.log('데이터 체크요망 마켓 : ', code , ' / seq : ', seqTimestamp, ' / calc : ',candle.calc_timestamp, ' / real : ', candle.timestamp);
+          }
+
+          candle.calc_timestamp = seqTimestamp;
+        }
+        
         sql = make_sql_candle_insert(candle);
         taskArr.shift();
       }
@@ -76,6 +86,8 @@ const getMinuteCandle = async (code, minuteUnit, timestamp, timeISO, count) => {
         if(error){ console.log(error); }
       });
       seq++;
+
+      if(seqTimestamp >= reqTimestamp10){ break; }
     }
 
     if(conn) {conn.release();}
@@ -136,12 +148,9 @@ export const getCurrMinuteCandle = async () => {
     timestamp = timestamp - (timestamp % (60 * 1000));// 요청시간은 1분 단위로 고정
     let reqTimeISO = new Date(timestamp + 1000).toISOString();// 실제 요청 ISO시간은 n분 1초로 설정
 
-    // const timestamp = new Date().getTime();
-    // const reqTimeISO = new Date(timestamp).toISOString();
-
     const count = (loopCount++ == 0) ? FIRST_REQ_CANDLE_COUNT : DEFAULT_CANDLE_COUNT;
     const interval = (loopCount++ == 0) ? FIRST_REQ_INTERVAL : DEFAULT_INTERVAL;
-    executeMinuteCandle(timestamp, reqTimeISO, codes, 1, count);
+    executeMinuteCandle(timestamp, reqTimeISO, codes, 1, count, interval);
   }, 1000 * 60);
 }
 
@@ -259,6 +268,15 @@ const make_sql_candle_insert = (candle) => {
     return sql;
 }
 
+const isOutOfBoundsTime = (criteriaTimestamp10, oldestTimestamp10, timestamp10) => {
+  if(!criteriaTimestamp10 || !oldestTimestamp10 || !timestamp10){ return true; }
+
+  if(timestamp10 < oldestTimestamp10){ return true; }
+  if(timestamp10 > criteriaTimestamp10){ return true; }
+
+  return false;
+}
+
 // 데이터 누락 시 이전 레코드로 더미 데이터 생성 쿼리
 const make_sql_dummy_candle_insert = (market, calc_timestamp) => {
   let timestamp = calc_timestamp * 1000;
@@ -345,4 +363,3 @@ export const retryFailCandle = async () => { // 0.5 초마다 실패한 요청�
     }
   }, 500)
 }
-

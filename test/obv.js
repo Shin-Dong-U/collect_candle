@@ -1,20 +1,16 @@
 import assert from 'assert';
 import db from '../common/dbconn.js';
 
-const t1 = 'hello mocha';
-
 // OBV DB 값 검증
 const obvValueCheck = async (minuteUnit) => {
+  const oneDay = 1000 * 60 * 60 * 24;
+  const yesterday = new Date(Date.now() - oneDay);
   const timeUnit = minuteUnit * 60;
   const limit = minuteUnit + 2;
 
-  let beforeTime = Math.floor(new Date().getTime() / 1000);
+  let beforeTime = Math.floor(yesterday / 1000);
   beforeTime = beforeTime - timeUnit - (beforeTime % (timeUnit));
-  // let beforeTime = 1648569600; // 2022-03-30 01:00
-  // if(minuteUnit == 240){
-  //   beforeTime = 1648569600 + (240 * 60); 
-  // }
-
+ 
   const sql = `
     SELECT *
     FROM candles 
