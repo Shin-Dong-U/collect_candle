@@ -1,9 +1,10 @@
-import {getYesterdayTimestamp} from './common/utils.js';
+import {getPrevTimestamp} from './common/utils.js';
+// import {getPrevMinuteCandle, getCurrMinuteCandle, retryFailCandle} from './jobs/get_obv.js';
 import {getPrevMinuteCandle, getCurrMinuteCandle, retryFailCandle} from './jobs/get_obv.js';
 
 // const startTime = 1648566000000; //  2022-03-30 00:00
-let startTime = process.argv[2] ? Number(process.argv[2]) : getYesterdayTimestamp();
-// console.log(startTime);
+let startTime = process.argv[2] ? Number(process.argv[2]) : await getPrevTimestamp();
+console.log(startTime);
 
 /*
 1. 입력 된 시간부터 현재까지 Candle 획득
@@ -11,7 +12,7 @@ let startTime = process.argv[2] ? Number(process.argv[2]) : getYesterdayTimestam
 3. 주기적으로 실패한 데이터가 있는지 확인 후 재 요청
 */
 const start = (startTime) => {
-  getPrevMinuteCandle(startTime, getCurrMinuteCandle);
+  getPrevMinuteCandle(startTime, getCurrMinuteCandle, 3);
   retryFailCandle();
 }
 

@@ -1,5 +1,28 @@
+import db from './dbconn.js';
+
+export const getPrevTimestamp = async () => {
+  const ONE_HOUR = 1000 * 60 * 60;
+  const lastTime = await lastestCandleInsertTime();
+
+  return lastTime + ONE_HOUR;
+}
+
+const lastestCandleInsertTime = async () => {
+  const pool = await db.getPool();
+  const [rows] = await pool.query(`SELECT calc_timestamp FROM candles where market='KRW-BTC' ORDER BY calc_timestamp DESC LIMIT 1`);
+
+  let calcTimestamp ;
+  if(rows[0] && rows[0].calc_timestamp){
+    calcTimestamp = rows[0].calc_timestamp;
+  }else{
+    calcTimestamp = getYesterdayTimestamp();
+  }
+
+  return calcTimestamp * 1000;
+}
+
 // 어제 00시 타임스탬프 구하기
-export const getYesterdayTimestamp = () => {
+const getYesterdayTimestamp = () => {
   const ONE_DAY = 1000 * 60 * 60 * 24;
   
   const date = new Date();

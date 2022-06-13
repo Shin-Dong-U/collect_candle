@@ -17,7 +17,7 @@ const failArr = new Array();
 const getMinuteCandle = async (code, minuteUnit, timestamp, timeISO, count) => {
   if(timestamp > new Date().getTime()){ return; } // 요청 시간이 현재 시간보다 크다면 리턴
 
-  // if(code == 'KRW-BTC'){ console.log('btc request')}
+  if(code == 'KRW-BTC'){ console.log('btc request')}
   
   let reqTimestamp10 = Math.floor(timestamp / 1000);
   reqTimestamp10 = reqTimestamp10 - (reqTimestamp10 % 60);
