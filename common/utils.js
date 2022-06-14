@@ -1,6 +1,8 @@
 import db from './dbconn.js';
 
-export const getPrevTimestamp = async () => {
+export const getPrevTimestamp = async (startTime) => {
+  if(startTime){ return Number(startTime); }
+
   const ONE_HOUR = 1000 * 60 * 60;
   const lastTime = await lastestCandleInsertTime();
 
@@ -8,17 +10,22 @@ export const getPrevTimestamp = async () => {
 }
 
 const lastestCandleInsertTime = async () => {
-  const pool = await db.getPool();
-  const [rows] = await pool.query(`SELECT calc_timestamp FROM candles where market='KRW-BTC' ORDER BY calc_timestamp DESC LIMIT 1`);
+  try{
+    const pool = await db.getPool();
+    const [rows] = await pool.query(`SELECT calc_timestamp FROM candles where market='KRW-BTC' ORDER BY calc_timestamp DESC LIMIT 1`);
 
-  let calcTimestamp ;
-  if(rows[0] && rows[0].calc_timestamp){
-    calcTimestamp = rows[0].calc_timestamp;
-  }else{
-    calcTimestamp = getYesterdayTimestamp();
+    let calcTimestamp ;
+    if(rows[0] && rows[0].calc_timestamp){
+      calcTimestamp = rows[0].calc_timestamp;
+    }else{
+      calcTimestamp = getYesterdayTimestamp();
+    }
+
+    return calcTimestamp * 1000;
+  }catch(error){
+    console.log(error);
+    return 0;
   }
-
-  return calcTimestamp * 1000;
 }
 
 // 어제 00시 타임스탬프 구하기

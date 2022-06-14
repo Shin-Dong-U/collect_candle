@@ -3,7 +3,9 @@ import {getPrevTimestamp} from './common/utils.js';
 import {getPrevMinuteCandle, getCurrMinuteCandle, retryFailCandle} from './jobs/get_obv.js';
 
 // const startTime = 1648566000000; //  2022-03-30 00:00
-let startTime = process.argv[2] ? Number(process.argv[2]) : await getPrevTimestamp();
+let timestampParam = process.argv[2];
+const startTime = await getPrevTimestamp(timestampParam);
+
 console.log(startTime);
 
 /*
